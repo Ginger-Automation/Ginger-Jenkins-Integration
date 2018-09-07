@@ -1,0 +1,24 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+    
+   
+	
+	<f:section title="1 - Ginger Execution Definition">
+	
+		<f:entry title="Solution Folder" field="solutionFolder"  >
+			<f:textbox  name="solutionFolder"/>
+		</f:entry>
+			
+		<f:entry   title="Run Set Name" field="runSetName" >
+			<f:textbox   name="runSetName"/>
+		</f:entry>
+		
+		<f:entry  title="Environment Name"  field="targetEnvCode" >
+			<f:textbox default="default" name="targetEnvCode"/>
+		</f:entry>
+		
+	</f:section>
+
+	
+    
+</j:jelly>
