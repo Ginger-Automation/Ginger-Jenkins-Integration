@@ -1,2 +1,5 @@
-language: jav
-  mvn test -B
+language: java
+  mvn install
+cache:
+ directories:
+   - $HOME/.m2
