@@ -1,5 +1,5 @@
 language: java
-  mvn package --settings settings.xml
+  mvn package --settings  $PWD/settings.xml
 cache:
  directories:
    - $HOME/.m2
