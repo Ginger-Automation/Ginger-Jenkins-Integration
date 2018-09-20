@@ -9,12 +9,16 @@
 			<f:textbox  name="solutionFolder"/>
 		</f:entry>
 			
-		<f:entry   title="Run Set Name" field="runSetName" >
+		<f:entry   title="RunSet Name" field="runSetName" >
 			<f:textbox   name="runSetName"/>
 		</f:entry>
 		
 		<f:entry  title="Environment Name"  field="targetEnvCode" >
-			<f:textbox default="default" name="targetEnvCode"/>
+			<f:textbox  name="targetEnvCode"/>
+		</f:entry>
+		
+		<f:entry  title="Ginger console folder"  field="gingerConsoleFolder" >
+			<f:textbox  name="gingerConsoleFolder"/>
 		</f:entry>
 		
 	</f:section>

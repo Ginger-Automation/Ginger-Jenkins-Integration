@@ -1,4 +1,4 @@
 <?jelly escape-by-default='true'?>
 <div>
-    The plugin will execute Amdocs Ginger test suite on unix
+    The plugin will execute Amdocs Ginger test suite
 </div>

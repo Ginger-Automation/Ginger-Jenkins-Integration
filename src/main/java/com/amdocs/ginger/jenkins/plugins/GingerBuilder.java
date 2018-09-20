@@ -21,13 +21,20 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileOutputStream;
+//import java.io.File;
+//import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.Writer;
+//import java.io.PrintWriter;
+//import java.io.Writer;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
 
 import jenkins.tasks.SimpleBuildStep;
 
@@ -45,20 +52,21 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
 	private String				solutionFolder;
 	private String				runSetName;
 	private String				targetEnvCode;
+	private String				gingerConsoleFolder;
 
 
     @DataBoundConstructor
     public GingerBuilder(
 				    		 String solutionFolder,
 				    		 String runSetName,
-				    		 String targetEnvCode
+				    		 String targetEnvCode,
+				    		 String gingerConsoleFolder
     						 ) {
 
         this.solutionFolder = solutionFolder;
         this.runSetName = runSetName;
         this.targetEnvCode = targetEnvCode;
-          
-
+        this.gingerConsoleFolder = gingerConsoleFolder;
     }
 
 
@@ -72,16 +80,24 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
 
     @Override
     public void perform(Run<?, ?> run, FilePath workspace, Launcher launcher, TaskListener listener) throws InterruptedException, IOException {
-
+ 
+    	String fileName = null; 
     	listener.getLogger().println("Solution folder: " + solutionFolder);
     	listener.getLogger().println("Run set name: " + runSetName);
-    	listener.getLogger().println("Target Env: " + targetEnvCode);
-    	createParamFile(solutionFolder,runSetName,targetEnvCode, listener);
+    	listener.getLogger().println("Target environment: " + targetEnvCode);
+    	listener.getLogger().println("Ginger console folder: " + gingerConsoleFolder);
+    	fileName = createParamFile(solutionFolder,runSetName,targetEnvCode,gingerConsoleFolder, listener);
     	
-    //	executeShellCommand();
+    	try {
+    		//listener.getLogger().println("dotnet /home/ginger/ginger_shell/publish/GingerShellPluginConsole.dll");
+			executeShellCommand(gingerConsoleFolder,fileName,listener);
+		} catch (Exception e) {
+			
+			e.printStackTrace();
+		}
     }
 
- //   @Symbol("greet")
+
     @Extension
     public static final class DescriptorImpl extends BuildStepDescriptor<Builder> {
 
@@ -110,7 +126,13 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
             return FormValidation.ok();
         }
     	
-    	
+    	public FormValidation doCheckGingerConsoleFolder(@QueryParameter String value)
+                throws IOException, ServletException {
+            if (value == null || value.length() == 0)
+                return FormValidation.error("Please set ginger console folder");
+            
+            return FormValidation.ok();
+        }
 
         @Override
         public boolean isApplicable(Class<? extends AbstractProject> aClass) {
@@ -119,33 +141,60 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
 
         @Override
         public String getDisplayName() {
-            return "Ginger Plugin"; //Messages.HelloWorldBuilder_DescriptorImpl_DisplayName();
+            return "Configure ginger execution";
         }
     }
 
+    private String getAbsolutePath()
+    {
+    	String curDir = System.getProperty("user.dir");
+    	if (curDir != null && curDir.length() > 0)
+    		curDir = curDir.substring(0,curDir.length()-1);
+    	
+    	return curDir;
+    }
 	
 
-    public void createParamFile(String solutionFolder,String runSetName,String targetEnvCode,TaskListener listener) throws IOException  {
+    public String createParamFile(String solutionFolder,String runSetName,
+    		String targetEnvCode,String gingerConsoleFolder, TaskListener listener) throws IOException  {
     	
     	File file;
     	Writer w;
     	PrintWriter pw = null;
-    	String filename;
+    	String filename = null;
+    	
+    	String dateStr;
+    	Date date = new Date();
+    	SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    	Calendar c = Calendar.getInstance();
+    	c.setTime(date);
+    	String year = String.valueOf(c.get(Calendar.YEAR));
+    	String month = String.valueOf(c.get(Calendar.MONTH)+1);
+    	String day = String.valueOf(c.get(Calendar.DAY_OF_MONTH));
+    	String hour = String.valueOf(c.get(Calendar.HOUR));
+    	String minute =String.valueOf(c.get(Calendar.MINUTE));
+    	String second = String.valueOf(c.get(Calendar.SECOND));
+    	dateStr =  year + month + day + hour + minute + second + "-";    	
+    	
         try{
-        	String curDir = System.getProperty("user.dir");
+        //	String curDir = System.getProperty("user.dir");
+        	String curDir = "/home/ginger/jenkins/plugin"; //getAbsolutePath();
         	listener.getLogger().println("curDir: " + curDir);
-        	filename = curDir + "/" + GINGER_PARAM_FILE_NAME;
+        	filename = curDir + "/" + dateStr +  GINGER_PARAM_FILE_NAME;
+        	listener.getLogger().println("filename: " + filename);
         	file = new File(filename);
         	w = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_16.name());
         	pw = new PrintWriter(w);
         	
         	
 			if (solutionFolder != null)
-				pw.println("SolutionFolder=" + solutionFolder);
+				pw.println("Solution folder=" + solutionFolder);
 			if (runSetName != null)
-				pw.println("RunSetName=" + runSetName);
+				pw.println("Run set name=" + runSetName);
 			if (targetEnvCode != null)
-				pw.println("TargetEnv=" + targetEnvCode);
+				pw.println("Target environment=" + targetEnvCode);
+			if (gingerConsoleFolder != null)
+				pw.println("Ginger console folder=" + gingerConsoleFolder);
 			
 			listener.getLogger().println("File " + filename + " was created");
         }
@@ -159,22 +208,30 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
       	    if (pw != null)
       	    	pw.close();
         }
-
+        return filename;
      }
 
-  /*   public void executeShellCommand()
+     public void executeShellCommand(String gingerConsolFolder,String fileName,TaskListener listener) throws Exception
      {
     	 BufferedReader b = null;
     	 try
     	 {
     		 Runtime r = Runtime.getRuntime();
-    		 Process p = r.exec("uname -a");
+    		//  dotnet GingerConsole.dll filename
+    		 //variable: 
+    		 // path for the GingerConsole.dll
+    		 // filename - needs to be unique for ever exec
+    		 
+    		 //Process p = r.exec("dotnet " + gingerConsolFolder + "GingerConsole.dll " + fileName);
+    		 //dotnet /home/ginger/ginger_shell/publish/GingerShellPluginConsole.dll
+    		 Process p = r.exec("dotnet " + gingerConsolFolder + "GingerShellPluginConsole.dll " + fileName);
     		 p.waitFor();
     		 b = new BufferedReader(new InputStreamReader(p.getInputStream()));
     		 String line = "";
-              //  dotnet GingerConsole.dll filename 
     		 while ((line = b.readLine()) != null) {
     		   System.out.println(line);
+    			 listener.getLogger().println("line");
+    			 logger.info(line);
     		 }
     	 }
     	 catch(Exception e)
@@ -189,7 +246,19 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     			 b.close();
     	 }
      }
-*/
+
+
+	
+
+
+
+	public String getRunSetName() {
+		return runSetName;
+	}
+
+
+
+
 
 	public String getSolutionFolder() {
 		return solutionFolder;
@@ -207,8 +276,16 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
 
 
 
-	public String getRunSetName() {
-		return runSetName;
+	public String getGingerConsoleFolder() {
+		return gingerConsoleFolder;
+	}
+
+
+
+
+
+	public void setGingerConsoleFolder(String gingerConsoleFolder) {
+		this.gingerConsoleFolder = gingerConsoleFolder;
 	}
 
 
