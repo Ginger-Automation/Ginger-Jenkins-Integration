@@ -33,8 +33,10 @@ import java.io.Writer;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 
 import jenkins.tasks.SimpleBuildStep;
 
@@ -85,7 +87,16 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	listener.getLogger().println("Solution folder: " + solutionFolder);
     	listener.getLogger().println("Run set name: " + runSetName);
     	listener.getLogger().println("Target environment: " + targetEnvCode);
+    	
+    	int len = gingerConsoleFolder.length();
+    	if (gingerConsoleFolder != null && len > 1)
+    	{
+    		if (gingerConsoleFolder.charAt(len-1) == '/' ||
+    			gingerConsoleFolder.charAt(len-1) == '\\' )
+    		  gingerConsoleFolder = gingerConsoleFolder.substring(0,len-1);
+    	}
     	listener.getLogger().println("Ginger console folder: " + gingerConsoleFolder);
+    	
     	fileName = createParamFile(solutionFolder,runSetName,targetEnvCode,gingerConsoleFolder, listener);
     	
     	try {
@@ -177,10 +188,8 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	dateStr =  year + month + day + hour + minute + second + "-";    	
     	
         try{
-        //	String curDir = System.getProperty("user.dir");
-        	String curDir = "/home/ginger/jenkins/plugin"; //getAbsolutePath();
-        	listener.getLogger().println("curDir: " + curDir);
-        	filename = curDir + "/" + dateStr +  GINGER_PARAM_FILE_NAME;
+        	String configDir = gingerConsoleFolder + "/config"; 
+        	filename = configDir + "/" + dateStr +  GINGER_PARAM_FILE_NAME;
         	listener.getLogger().println("filename: " + filename);
         	file = new File(filename);
         	w = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_16.name());
@@ -200,7 +209,7 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
         }
         catch(IOException  e)
         {
-      	  logger.error("Failed to create ginger parameter file");
+      	  logger.error("Failedd to create ginger parameter file");
       	  e.printStackTrace();
       	  throw e;
         }
@@ -214,29 +223,35 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
      public void executeShellCommand(String gingerConsolFolder,String fileName,TaskListener listener) throws Exception
      {
     	 BufferedReader b = null;
+    	 String command;
+    	 String dotnetPath;
     	 try
     	 {
     		 Runtime r = Runtime.getRuntime();
-    		//  dotnet GingerConsole.dll filename
-    		 //variable: 
-    		 // path for the GingerConsole.dll
-    		 // filename - needs to be unique for ever exec
+    		 //dotnet /home/ginger/jenkins/plugin/gingerconsole/GingerConsole.dll filename
     		 
-    		 //Process p = r.exec("dotnet " + gingerConsolFolder + "GingerConsole.dll " + fileName);
-    		 //dotnet /home/ginger/ginger_shell/publish/GingerShellPluginConsole.dll
-    		 Process p = r.exec("dotnet " + gingerConsolFolder + "GingerShellPluginConsole.dll " + fileName);
+    		 dotnetPath = findDotnetPath(listener);  //  "/home/ginger/dotnet/dotnet"
+    		 command =  "/home/ginger/dotnet/dotnet "  + gingerConsolFolder + "/GingerConsole.dll " + fileName;
+    		 listener.getLogger().println("call - " + command);
+    		 Process p = r.exec(command);
+    		 listener.getLogger().println("called - " + command);
+
     		 p.waitFor();
     		 b = new BufferedReader(new InputStreamReader(p.getInputStream()));
     		 String line = "";
     		 while ((line = b.readLine()) != null) {
-    		   System.out.println(line);
-    			 listener.getLogger().println("line");
+    		     System.out.println(line);
+    			 listener.getLogger().println(line);
     			 logger.info(line);
     		 }
+    	  
+    		  
+    		 
     	 }
     	 catch(Exception e)
     	 {
-    		 logger.error("Faile to execute shell command");
+    		 logger.error("Failed to execute shell command");
+    		 listener.getLogger().println(e.getMessage());
     		 e.printStackTrace();
     		 throw e;
     		 
@@ -247,7 +262,57 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	 }
      }
 
-
+     public String findDotnetPath(TaskListener listener) throws Exception
+     {
+    	 BufferedReader b = null;
+    	 String os = System.getProperty("os.name");
+    	 listener.getLogger().println(os); 
+         String dotnetPath = "dotnet ";
+         List<String> resultList = new ArrayList<String>();
+    	 try
+    	 {
+    	   if ("Linux".equals(os) || "Unix".equals(os))
+    	   {
+    		 Runtime r = Runtime.getRuntime();
+     		 Process p = r.exec("whereis dotnet");
+    		 p.waitFor();
+    		 
+    		 
+    		 b = new BufferedReader(new InputStreamReader(p.getInputStream()));
+    		 String line = "";
+    		 int lines = 0;
+    		 while ((line = b.readLine()) != null) {
+    			 {
+    			   resultList.add(line);
+    			   listener.getLogger().println("result-" + line); 
+    			   lines++;
+    			 }
+    		 }
+    		 listener.getLogger().println("lines-" + lines);
+    		 if (resultList != null && resultList.size() == 1 )
+    		 {
+    			 
+    			 dotnetPath = resultList.get(0);
+    			 if (dotnetPath.startsWith("dotnet: "))
+    			 {
+    			   dotnetPath = dotnetPath.substring(7,dotnetPath.length()); 
+    			   dotnetPath += "/";
+    			   listener.getLogger().println("dotnetPath=" + dotnetPath);
+    			 }
+    		 }
+    	   }
+    	 }
+    	 catch(Exception e)
+    	 {
+    		 listener.getLogger().println("Failed to find dotnet command");
+    		 e.printStackTrace();
+    	 }
+    	 finally{
+    		 if (b != null)
+    			 b.close();
+    	 }
+    	 return dotnetPath;
+     }
 	
 
 
