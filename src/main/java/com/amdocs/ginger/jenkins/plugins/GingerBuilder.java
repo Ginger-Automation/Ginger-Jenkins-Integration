@@ -1,10 +1,14 @@
 package com.amdocs.ginger.jenkins.plugins;
 
 import hudson.Launcher;
+import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.util.FormValidation;
+import hudson.util.IOUtils;
+import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
+import hudson.model.BuildListener;
 import hudson.model.ModelObject;
 import hudson.model.Run;
 import hudson.model.TaskListener;
@@ -15,21 +19,20 @@ import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-import javax.servlet.ServletException;
 
+import ch.ethz.ssh2.StreamGobbler;
+
+import javax.servlet.ServletException;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileOutputStream;
-//import java.io.File;
-//import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.Writer;
-//import java.io.PrintWriter;
-//import java.io.Writer;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
@@ -37,6 +40,8 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 import jenkins.tasks.SimpleBuildStep;
 
@@ -55,6 +60,8 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
 	private String				runSetName;
 	private String				targetEnvCode;
 	private String				gingerConsoleFolder;
+
+	
 
 
     @DataBoundConstructor
@@ -75,11 +82,6 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
    
     
 
-  //  @DataBoundSetter
-  //  public void setUseFrench(boolean useFrench) {
-  //      this.useFrench = useFrench;
-  //  }
-
     @Override
     public void perform(Run<?, ?> run, FilePath workspace, Launcher launcher, TaskListener listener) throws InterruptedException, IOException {
  
@@ -88,6 +90,16 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	listener.getLogger().println("Run set name: " + runSetName);
     	listener.getLogger().println("Target environment: " + targetEnvCode);
     	
+    	final EnvVars env = run.getEnvironment(listener);
+        String dotnetVar = env.get("dotnet","dotnet "); 
+   	    if (dotnetVar == null || "null".equals(dotnetVar) || "".equals(dotnetVar))
+		   dotnetVar = "dotnet ";
+   	    else
+   	       dotnetVar += " ";
+   	 //   listener.getLogger().println("dotnetVar-" + dotnetVar);
+    	
+   	    
+   	    
     	int len = gingerConsoleFolder.length();
     	if (gingerConsoleFolder != null && len > 1)
     	{
@@ -101,7 +113,7 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	
     	try {
     		//listener.getLogger().println("dotnet /home/ginger/ginger_shell/publish/GingerShellPluginConsole.dll");
-			executeShellCommand(gingerConsoleFolder,fileName,listener);
+			executeShellCommand(gingerConsoleFolder,fileName,listener,dotnetVar);
 		} catch (Exception e) {
 			
 			e.printStackTrace();
@@ -189,8 +201,9 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	
         try{
         	String configDir = gingerConsoleFolder + "/config"; 
-        	filename = configDir + "/" + dateStr +  GINGER_PARAM_FILE_NAME;
-        	listener.getLogger().println("filename: " + filename);
+        	createConfigFolder(configDir);
+         	filename = configDir + "/" + dateStr +  GINGER_PARAM_FILE_NAME;
+   //     	listener.getLogger().println("filename: " + filename);
         	file = new File(filename);
         	w = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_16.name());
         	pw = new PrintWriter(w);
@@ -209,7 +222,6 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
         }
         catch(IOException  e)
         {
-      	  logger.error("Failedd to create ginger parameter file");
       	  e.printStackTrace();
       	  throw e;
         }
@@ -219,62 +231,160 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
         }
         return filename;
      }
+    
+    
+      private void createConfigFolder(String directoryName)
+      {
+    	  try
+    	  {
+    		  File directory = new File(directoryName);
+    		    if (! directory.exists()){
+    		        directory.mkdir();
+     		    }
+    	  }
+    	  catch(Exception e)
+    	  {
+    		  throw e;
+    	  }
+    	  
+      }
 
-     public void executeShellCommand(String gingerConsolFolder,String fileName,TaskListener listener) throws Exception
+     public void executeShellCommand(String gingerConsolFolder,String fileName,TaskListener listener,String dotnetVar) throws Exception
      {
-    	 BufferedReader b = null;
     	 String command;
-    	 String dotnetPath;
     	 try
     	 {
-    		 Runtime r = Runtime.getRuntime();
-    		 //dotnet /home/ginger/jenkins/plugin/gingerconsole/GingerConsole.dll filename
-    		 
-    		 dotnetPath = findDotnetPath(listener);  //  "/home/ginger/dotnet/dotnet"
-    		 command =  "/home/ginger/dotnet/dotnet "  + gingerConsolFolder + "/GingerConsole.dll " + fileName;
-    		 listener.getLogger().println("call - " + command);
-    		 Process p = r.exec(command);
-    		 listener.getLogger().println("called - " + command);
+    		// runUnixCommand(listener);
+             
 
-    		 p.waitFor();
-    		 b = new BufferedReader(new InputStreamReader(p.getInputStream()));
-    		 String line = "";
-    		 while ((line = b.readLine()) != null) {
-    		     System.out.println(line);
-    			 listener.getLogger().println(line);
-    			 logger.info(line);
+    		 
+       		 command =  dotnetVar + gingerConsolFolder + "/GingerConsole.dll " + fileName;
+       		 // gingerConsolFolder = /home/ginger/jenkins/plugin/gingerconsole
+    	     //	 command =  findDotnetPath(listener) + gingerConsolFolder + "/GingerConsole.dll " + fileName;
+    		 listener.getLogger().println("command-" + command);
+     		  
+    		 ProcessBuilder builder = new ProcessBuilder();
+    		 if (isUnix())
+    		 {
+		       builder.command("/bin/bash","-c",command);   //ksh
+			   builder.directory(new File(System.getProperty("user.home")));
     		 }
-    	  
-    		  
+    		 else if (isWindows())
+    		 {
+    			 builder.command(command);  
+    		 }
+			Process process = builder.start();
+			StreamGobbler streamGobbler = 
+			  new StreamGobbler(process.getInputStream(), listener);
+			Executors.newSingleThreadExecutor().submit(streamGobbler);
+			int exitCode = process.waitFor();
+    		 
     		 
     	 }
     	 catch(Exception e)
     	 {
-    		 logger.error("Failed to execute shell command");
     		 listener.getLogger().println(e.getMessage());
     		 e.printStackTrace();
     		 throw e;
     		 
     	 }
-    	 finally{
-    		 if (b != null)
-    			 b.close();
+    	 
+     }
+     
+    
+     
+     
+     private boolean isWindows()
+     {
+    	 String os = System.getProperty("os.name").toLowerCase();
+    	 if (os.contains("windows"))
+    		 return true;
+    	 else
+    		 return false;
+     }
+     
+     private boolean isUnix()
+     {
+    	 String os = System.getProperty("os.name");
+    	 if ("Linux".equals(os) || "Unix".equals(os))
+    		 return true;
+    	 else
+    		 return false;
+     }
+     public String findDotnetPath(TaskListener listener) throws Exception
+     {
+         String dotnetPath = "dotnet ";
+    	 try
+    	 {
+    	   if (isUnix())
+    	   {
+    		listener.getLogger().println("Unix environment");   
+       		ProcessBuilder builder = new ProcessBuilder();
+        	  builder.command("/bin/bash","-c","echo $dotnet");  //ksh  whereis dotnet
+       		builder.directory(new File(System.getProperty("user.home")));
+       		Process process = builder.start();
+       		int exitCode = process.waitFor();
+       		dotnetPath = output(process.getInputStream(),listener); 
+    	   }
+    	   else if (isWindows())
+    	   {
+    		   listener.getLogger().println("Windows environment");   
+    	   }
     	 }
+    	 catch(Exception e)
+    	 {
+    		 listener.getLogger().println("Failed to find dotnet command");
+    		 e.printStackTrace();
+    	 }
+    	 return dotnetPath;
+     }
+     
+     
+     private static String output(InputStream inputStream,TaskListener listener) throws IOException {
+         StringBuilder sb = new StringBuilder();
+         String dotnetPath = "";
+         BufferedReader br = null;
+         try {
+             br = new BufferedReader(new InputStreamReader(inputStream));
+             String line = null;
+             while ((line = br.readLine()) != null) {
+                 sb.append(line);
+             }
+             listener.getLogger().println(sb.toString());
+             if (sb != null && sb.length() == 1 )
+    		 {
+            	 dotnetPath = sb.toString();
+    			 if (dotnetPath.startsWith("dotnet:"))
+    			 {
+    			   listener.getLogger().println("dotnetPath-" + dotnetPath);
+    			   dotnetPath = dotnetPath.substring(7,dotnetPath.length()); 
+    			   dotnetPath += "/";
+    			   listener.getLogger().println("dotnetPath=" + dotnetPath);
+    			 }
+    		 }
+         } finally {
+        	 if (br != null)
+             br.close();
+         }
+         return sb.toString();
+       //  return "/home/ginger/dotnet/dotnet  ";
      }
 
+     
+/*
      public String findDotnetPath(TaskListener listener) throws Exception
      {
     	 BufferedReader b = null;
-    	 String os = System.getProperty("os.name");
-    	 listener.getLogger().println(os); 
          String dotnetPath = "dotnet ";
          List<String> resultList = new ArrayList<String>();
     	 try
     	 {
-    	   if ("Linux".equals(os) || "Unix".equals(os))
+    	   if (isUnix())
     	   {
     		 Runtime r = Runtime.getRuntime();
-     		 Process p = r.exec("whereis dotnet");
+    		 listener.getLogger().println("call-whoami"); 
+     		// Process p = r.exec("whereis dotnet.sh");
+    		 Process p = r.exec("whoami");
     		 p.waitFor();
     		 
     		 
@@ -293,8 +403,9 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     		 {
     			 
     			 dotnetPath = resultList.get(0);
-    			 if (dotnetPath.startsWith("dotnet: "))
+    			 if (dotnetPath.startsWith("dotnet:"))
     			 {
+    			   listener.getLogger().println("dotnetPath-" + dotnetPath);
     			   dotnetPath = dotnetPath.substring(7,dotnetPath.length()); 
     			   dotnetPath += "/";
     			   listener.getLogger().println("dotnetPath=" + dotnetPath);
@@ -313,7 +424,62 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	 }
     	 return dotnetPath;
      }
-	
+   */  
+     
+     
+     
+     private void runUnixCommand(TaskListener listener) throws Exception
+     {
+    	 try
+    	 {
+    		listener.getLogger().println("----------------Start----------------");
+    		listener.getLogger().println("run - whereis dotnet");
+    		ProcessBuilder builder = new ProcessBuilder();
+    		     // builder.command("/bin/bash","-c","whereis dotnet");
+    		     builder.command("/bin/bash","-c","whereis dotnet");
+    		builder.directory(new File(System.getProperty("user.home")));
+   // 		builder.redirectErrorStream(true);
+    		Process process = builder.start();
+    //		IOUtils.copy(process.getInputStream(), System.out);
+    		StreamGobbler streamGobbler = 
+    		  new StreamGobbler(process.getInputStream(), listener);
+    		Executors.newSingleThreadExecutor().submit(streamGobbler);
+    		int exitCode = process.waitFor();
+    		listener.getLogger().println("exitCode-" + exitCode);
+    		listener.getLogger().println("---------------End----------------");
+    	 }
+    	 catch(Exception e)
+    	 {
+    		 listener.getLogger().println("Failed to execute shell command");
+    		 e.printStackTrace();
+    		 
+    	 } 
+     }
+     
+     private  class StreamGobbler implements Runnable {
+         private InputStream inputStream;
+         private TaskListener listener;
+      
+         public StreamGobbler(InputStream inputStream, TaskListener listener) {
+             this.inputStream = inputStream;
+             this.listener = listener;
+         }
+          
+         
+         public void run() {
+         	
+         	String line = null;
+         	BufferedReader br =   new BufferedReader(new InputStreamReader(inputStream));
+         	try {
+     			while ((line = br.readLine())!=null)
+     				listener.getLogger().println(line);
+     		} catch (IOException e) {
+     			listener.getLogger().println(e.getMessage());
+     			e.printStackTrace();
+     		}
+         	
+         }
+     }
 
 
 
