@@ -51,10 +51,10 @@ import org.apache.log4j.Logger;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundSetter;
 
- /***********************************************************************/
+ /*************************************************************************/
  /*The class GingerBuilder is jenkins plugin for running Ginger on windows*/
  /*or unix                                                                */
- /************************************************************************/
+ /*************************************************************************/
 public class GingerBuilder extends Builder implements SimpleBuildStep {
 	public static final String GINGER_PARAM_FILE_NAME = "GingerParam.txt";
 	public static final int MINIMAL_SUMMARY_LEN = 45;
@@ -88,7 +88,7 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
    
     
     /*****************************************************************************/
-    /*  The function override perform the Hudson run command*/
+    /*  The function override perform the Hudson run command                     */
     /*****************************************************************************/
     @Override
     public void perform(Run<?, ?> run, FilePath workspace, Launcher launcher, TaskListener listener) throws InterruptedException, IOException {
@@ -260,10 +260,10 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
         }
         return filename;
      }
-    /*****************************************************************************/
+    /******************************************************************************/
     /*  The function creates config folder in case it doesn't exists              */
     /*                 															  */
-    /*****************************************************************************/
+    /******************************************************************************/
     private void createConfigFolder(String directoryName)
       {
     	  try
@@ -325,8 +325,8 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	 
      }
      /*****************************************************************************/
-     /*  Check if the OS is windows							              */
-     /*                													   */
+     /*  Check if the OS is windows							                      */
+     /*                													          */
      /*****************************************************************************/
      private boolean isWindows()
      {
@@ -337,8 +337,8 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     		 return false;
      }
      /*****************************************************************************/
-     /*  Check if the OS is unix							              */
-     /*                													   */
+     /*  Check if the OS is unix							                      */
+     /*                													          */
      /*****************************************************************************/
      private boolean isUnix()
      {
@@ -414,8 +414,8 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
      
      
      /*****************************************************************************/
-     /* The function runs unix shell command				  		          	   */
-     /*                   															*/
+     /* The function runs unix shell command				  		          	  */
+     /*                   														  */
      /*****************************************************************************/
   
      private void runUnixCommand(TaskListener listener) throws Exception
@@ -447,7 +447,7 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
      }
      
      /*****************************************************************************/
-     /*   The function is listening for the process command  result                        */
+     /*   The function is listening for the process command  result               */
      /*                                                                           */
      /*****************************************************************************/
      private  class StreamGobbler implements Runnable {
