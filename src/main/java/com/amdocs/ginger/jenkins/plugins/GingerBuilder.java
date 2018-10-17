@@ -1,6 +1,7 @@
 package com.amdocs.ginger.jenkins.plugins;
 
 import hudson.Launcher;
+import hudson.AbortException;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
@@ -10,6 +11,7 @@ import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
 import hudson.model.BuildListener;
 import hudson.model.ModelObject;
+import hudson.model.Result;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.tasks.Builder;
@@ -49,11 +51,13 @@ import org.apache.log4j.Logger;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundSetter;
 
-   
-
-
+ /***********************************************************************/
+ /*The class GingerBuilder is jenkins plugin for running Ginger on windows*/
+ /*or unix                                                                */
+ /************************************************************************/
 public class GingerBuilder extends Builder implements SimpleBuildStep {
 	public static final String GINGER_PARAM_FILE_NAME = "GingerParam.txt";
+	public static final int MINIMAL_SUMMARY_LEN = 45;
 	private static Logger logger = Logger.getLogger(GingerBuilder.class.getName());
 	
 	private String				solutionFolder;
@@ -61,9 +65,11 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
 	private String				targetEnvCode;
 	private String				gingerConsoleFolder;
 
+	private String result = "Failure";
 	
-
-
+    /*****************************************************************************/
+    /*  The jenkins plugin constracor that gets as input all the plugin variables*/
+    /*****************************************************************************/
     @DataBoundConstructor
     public GingerBuilder(
 				    		 String solutionFolder,
@@ -81,7 +87,9 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
 
    
     
-
+    /*****************************************************************************/
+    /*  The function override perform the Hudson run command*/
+    /*****************************************************************************/
     @Override
     public void perform(Run<?, ?> run, FilePath workspace, Launcher launcher, TaskListener listener) throws InterruptedException, IOException {
  
@@ -108,19 +116,35 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     		  gingerConsoleFolder = gingerConsoleFolder.substring(0,len-1);
     	}
     	listener.getLogger().println("Ginger console folder: " + gingerConsoleFolder);
-    	
+    	// Creates parameter file for Ginger
     	fileName = createParamFile(solutionFolder,runSetName,targetEnvCode,gingerConsoleFolder, listener);
     	
     	try {
-    		//listener.getLogger().println("dotnet /home/ginger/ginger_shell/publish/GingerShellPluginConsole.dll");
-			executeShellCommand(gingerConsoleFolder,fileName,listener,dotnetVar);
-		} catch (Exception e) {
+ 			executeShellCommand(gingerConsoleFolder,fileName,listener,dotnetVar);
+ 			
+ 		//	listener.getLogger().println("result-" + result);
+ 			if ("Failure".equals(result))
+ 				throw new AbortException("Run set completed with failure");
+ 			
+		} 
+        catch (AbortException e) {
+			
+			throw e;
+			
+		}
+    	
+    	
+    	catch (Exception e) {
 			
 			e.printStackTrace();
+			
 		}
     }
-
-
+    
+    
+    /*****************************************************************************/
+    /*  The function performs plugin variables validation					     */
+    /*****************************************************************************/
     @Extension
     public static final class DescriptorImpl extends BuildStepDescriptor<Builder> {
 
@@ -167,7 +191,9 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
             return "Configure ginger execution";
         }
     }
-
+    /*****************************************************************************/
+    /*  The function gets the absolute path					   				     */
+    /*****************************************************************************/
     private String getAbsolutePath()
     {
     	String curDir = System.getProperty("user.dir");
@@ -177,7 +203,10 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	return curDir;
     }
 	
-
+    /*****************************************************************************/
+    /*  The function creates configuration file for Ginger that includes         */
+    /*  all the plugin variable values     										 */
+    /*****************************************************************************/
     public String createParamFile(String solutionFolder,String runSetName,
     		String targetEnvCode,String gingerConsoleFolder, TaskListener listener) throws IOException  {
     	
@@ -231,9 +260,11 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
         }
         return filename;
      }
-    
-    
-      private void createConfigFolder(String directoryName)
+    /*****************************************************************************/
+    /*  The function creates config folder in case it doesn't exists              */
+    /*                 															  */
+    /*****************************************************************************/
+    private void createConfigFolder(String directoryName)
       {
     	  try
     	  {
@@ -248,7 +279,10 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	  }
     	  
       }
-
+      /*****************************************************************************/
+      /*  The function creates config folder if it does not exists                 */
+      /*  Works for both OS Windows and Unix using dotnet command                  */
+      /*****************************************************************************/
      public void executeShellCommand(String gingerConsolFolder,String fileName,TaskListener listener,String dotnetVar) throws Exception
      {
     	 String command;
@@ -271,7 +305,7 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     		 }
     		 else if (isWindows())
     		 {
-    			 builder.command(command);  
+    			 builder.command("cmd","/c",command);   
     		 }
 			Process process = builder.start();
 			StreamGobbler streamGobbler = 
@@ -290,10 +324,10 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	 }
     	 
      }
-     
-    
-     
-     
+     /*****************************************************************************/
+     /*  Check if the OS is windows							              */
+     /*                													   */
+     /*****************************************************************************/
      private boolean isWindows()
      {
     	 String os = System.getProperty("os.name").toLowerCase();
@@ -302,7 +336,10 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	 else
     		 return false;
      }
-     
+     /*****************************************************************************/
+     /*  Check if the OS is unix							              */
+     /*                													   */
+     /*****************************************************************************/
      private boolean isUnix()
      {
     	 String os = System.getProperty("os.name");
@@ -311,6 +348,10 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	 else
     		 return false;
      }
+     /*****************************************************************************/
+     /*   The function finds the dotnet path					             	  */
+     /*                   														  */
+     /*****************************************************************************/
      public String findDotnetPath(TaskListener listener) throws Exception
      {
          String dotnetPath = "dotnet ";
@@ -338,8 +379,6 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	 }
     	 return dotnetPath;
      }
-     
-     
      private static String output(InputStream inputStream,TaskListener listener) throws IOException {
          StringBuilder sb = new StringBuilder();
          String dotnetPath = "";
@@ -371,63 +410,14 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
      }
 
      
-/*
-     public String findDotnetPath(TaskListener listener) throws Exception
-     {
-    	 BufferedReader b = null;
-         String dotnetPath = "dotnet ";
-         List<String> resultList = new ArrayList<String>();
-    	 try
-    	 {
-    	   if (isUnix())
-    	   {
-    		 Runtime r = Runtime.getRuntime();
-    		 listener.getLogger().println("call-whoami"); 
-     		// Process p = r.exec("whereis dotnet.sh");
-    		 Process p = r.exec("whoami");
-    		 p.waitFor();
-    		 
-    		 
-    		 b = new BufferedReader(new InputStreamReader(p.getInputStream()));
-    		 String line = "";
-    		 int lines = 0;
-    		 while ((line = b.readLine()) != null) {
-    			 {
-    			   resultList.add(line);
-    			   listener.getLogger().println("result-" + line); 
-    			   lines++;
-    			 }
-    		 }
-    		 listener.getLogger().println("lines-" + lines);
-    		 if (resultList != null && resultList.size() == 1 )
-    		 {
-    			 
-    			 dotnetPath = resultList.get(0);
-    			 if (dotnetPath.startsWith("dotnet:"))
-    			 {
-    			   listener.getLogger().println("dotnetPath-" + dotnetPath);
-    			   dotnetPath = dotnetPath.substring(7,dotnetPath.length()); 
-    			   dotnetPath += "/";
-    			   listener.getLogger().println("dotnetPath=" + dotnetPath);
-    			 }
-    		 }
-    	   }
-    	 }
-    	 catch(Exception e)
-    	 {
-    		 listener.getLogger().println("Failed to find dotnet command");
-    		 e.printStackTrace();
-    	 }
-    	 finally{
-    		 if (b != null)
-    			 b.close();
-    	 }
-    	 return dotnetPath;
-     }
-   */  
+
      
      
-     
+     /*****************************************************************************/
+     /* The function runs unix shell command				  		          	   */
+     /*                   															*/
+     /*****************************************************************************/
+  
      private void runUnixCommand(TaskListener listener) throws Exception
      {
     	 try
@@ -456,6 +446,10 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
     	 } 
      }
      
+     /*****************************************************************************/
+     /*   The function is listening for the process command  result                        */
+     /*                                                                           */
+     /*****************************************************************************/
      private  class StreamGobbler implements Runnable {
          private InputStream inputStream;
          private TaskListener listener;
@@ -469,19 +463,142 @@ public class GingerBuilder extends Builder implements SimpleBuildStep {
          public void run() {
          	
          	String line = null;
+
+         	String summaryStr = "*** Test Summary:";
          	BufferedReader br =   new BufferedReader(new InputStreamReader(inputStream));
          	try {
      			while ((line = br.readLine())!=null)
+     			{
      				listener.getLogger().println(line);
-     		} catch (IOException e) {
+     				
+ 				    if (line.startsWith(summaryStr))
+ 				    {
+ 				      if (line.length() >= MINIMAL_SUMMARY_LEN)	
+ 				        printSummary(listener,line.substring(summaryStr.length(), line.length()));
+ 				      else
+	     			    listener.getLogger().println("Invalid summary syntax");	
+ 				    }
+      			}
+      		} catch (IOException e) {
      			listener.getLogger().println(e.getMessage());
      			e.printStackTrace();
      		}
-         	
+         	try {
+				br.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
          }
      }
-
-
+    		
+     /*****************************************************************************/
+     /*   The function check the validation of the test summary and print it      */
+     /*                   														  */
+     /*****************************************************************************/
+  	 // *** Test Summary: Pass:2, Fail:3, Total:5 ***	
+     private void printSummary(TaskListener listener,String line)
+     {
+    	 boolean valid = true;
+    	 String passStr  = " Pass:";
+    	 String faileStr = " Fail:";
+    	 String totalStr = " Total:";
+    	 int pass = 0;
+    	 int fail = 0 ;
+    	 int total = 0;
+    	 StringBuffer numStr = new StringBuffer();
+    	 try
+    	 {
+    		 // pass
+    		 if (line.startsWith(passStr)){
+    			line = line.substring(passStr.length(),line.length());
+    			numStr = getNum(line,',');
+    			if (numStr == null)
+    				valid = false;
+    			else{
+    				line = line.substring(numStr.length()+1,line.length());
+    				pass = Integer.parseInt(numStr.toString());
+    			}
+    			numStr = new StringBuffer();
+    		 }
+    		 else 
+    			 valid = false;
+    		 // Fail
+    		 if (valid && line.startsWith(faileStr)){
+     			line = line.substring(faileStr.length(),line.length());
+     			numStr = getNum(line,',');
+     			if (numStr == null)
+     				valid = false;
+     			else{
+     				line = line.substring(numStr.length()+1,line.length());
+     				fail = Integer.parseInt(numStr.toString());
+     			}
+     			numStr = new StringBuffer();
+     		 }
+     		 else 
+     			 valid = false;
+    		 // Total
+    		 if (valid && line.startsWith(totalStr)){
+      			line = line.substring(totalStr.length(),line.length());
+      			numStr = getNum(line,' ');
+      			if (numStr == null)
+      				valid = false;
+      			else{
+      				line = line.substring(numStr.length()+1,line.length());
+      				total = Integer.parseInt(numStr.toString());
+      			}
+      			numStr = new StringBuffer();
+      		 }
+      		 else 
+      			 valid = false;
+    		 if (!valid)
+    			 listener.getLogger().println("Invalid summary syntax");
+    	/*	 else
+    		 {
+    			 listener.getLogger().println("Total summary:");
+    			 listener.getLogger().println("--------------");
+    			 listener.getLogger().println("Passed: " + pass);
+    			 listener.getLogger().println("Failed: " + fail);
+    			 listener.getLogger().println("Total:  " + total);
+    		 }
+    	  */	 
+    		 if (fail == 0)
+    			 result = "Success";
+    		 else
+    			 result = "Failure"; 
+     	 }
+    	 catch(Exception e)
+    	 {
+    		 if (valid == false)
+    		   listener.getLogger().println("Invalid summary syntax");
+    	 }
+     }
+     
+   private StringBuffer getNum(String line, char stopChar )
+   {
+	 StringBuffer numStr = new StringBuffer();  
+	 try
+	 {
+	   
+	   for(int i=0;i<line.length() && line.charAt(i) != stopChar; i++)
+	   {
+		  if (line.charAt(i) >= '0' && line.charAt(i) <= '9')
+			  numStr.append(line.charAt(i));
+		  else
+		  {
+			  numStr = null;
+			  break;
+		  }
+		}
+	    if (numStr != null && numStr.length() == 0)
+	    	numStr = null;
+	 }
+	 catch(Exception e)
+  	 {
+		 numStr = null;
+  	 }
+	 return numStr;
+   }
+     
 
 	public String getRunSetName() {
 		return runSetName;
